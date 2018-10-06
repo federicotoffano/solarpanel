@@ -2,6 +2,7 @@ class LocalPaths(object):
 
     from uuid import getnode as get_mac
     mac = get_mac()
+    print(mac)
 
     if mac == 450157882930061:  # dave's Gpu
         main_path = "/home/dbrowne/Desktop/"
@@ -9,8 +10,8 @@ class LocalPaths(object):
         main_path = "C:/Users/dbrowne/Desktop/"
     if mac == 450157882930061:  # dave's home
         main_path = "C:/Users/dave/Desktop/"
-    if mac == 450157882930061:  # fede's mac
-        main_path = ""
+    if mac == 167132875593445:  # fede's mac
+        main_path = "/Users/ftoffano/AppData/SolarPanel/"
     if mac == 18431769921280:  # fede's asus
         main_path = "E:/AppData/SolarPanel/"
 
