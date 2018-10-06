@@ -2,5 +2,13 @@
   <component name="XDebuggerSettings">
     <data-views />
     <general />
+    <debuggers>
+      <debugger id="python">
+        <configuration>
+          <option name="simplifiedView" value="false" />
+          <option name="valuesPolicy" value="SYNC" />
+        </configuration>
+      </debugger>
+    </debuggers>
   </component>
 </application>
