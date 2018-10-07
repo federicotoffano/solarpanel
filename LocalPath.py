@@ -14,3 +14,5 @@ class LocalPaths(object):
     scripts_dir = main_path + 'SolarPanel_code'
     image_dir_mono = image_dir + '/mono/'
 
+    def __init__(self, loc = ''):
+        None
