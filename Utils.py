@@ -38,7 +38,7 @@ def find_grid_rects(img, nCols, nRows):
             cv2.rectangle(img, (x1, y1), (x2, y2), 255, 1)
     return img
 
-def crop_img(file,no_info_point):
+def crop_img(file,no_info_point=50):
     img_rbg = cv2.imread(file)
     img_rbg[np.where(img_rbg < no_info_point)] = 0
     img_grey_org = cv2.cvtColor(img_rbg,cv2.COLOR_BGR2GRAY)
