@@ -75,3 +75,62 @@ def find_grid_rects(img, nCols, nRows):
             cv2.rectangle(img, (x1, y1), (x2, y2), 255, 1)
     return img
 
+def remove_white_label(img):
+    for col_i in range(img.shape[1]):
+        top10_row_val = [img.item(x,col_i) for x in range(10)]
+        if any(x == 255 for x in top10_row_val):
+            end_col = col_i+1
+        else:
+            break
+    for row_i in range(end_col):
+        top10_col_val = [img.item(row_i,x) for x in range(10)]
+        if any(x == 255 for x in top10_col_val):
+            end_row = row_i+1
+        else:
+            break
+
+    img[:end_row,:end_col] = 0
+    return img
+
+def apply_smoothing(image, kernel_size=15):
+    """
+    kernel_size must be postivie and odd
+    """
+    return cv2.GaussianBlur(image, (kernel_size, kernel_size), 0)
+
+def detect_edges(image, low_threshold=5, high_threshold=75):
+    return cv2.Canny(image, low_threshold, high_threshold)
+
+def cosine(a,b):
+    ee = 1*10**-8
+    return (np.dot(a,b)+ee)/((np.linalg.norm(a)*np.linalg.norm(b))+ee)
+
+def find_start_end_points(cos_vals):
+    zero_run,max_run = 0,0
+    for i in range(len(cos_vals)):
+        if cos_vals[i] < 1:
+            zero_run += 1
+        else:
+            if zero_run > max_run:
+                max_run = cp.copy(zero_run)
+                end_point = cp.copy(i)
+                start_point = (end_point-zero_run)
+                zero_run = 0
+            else:
+                zero_run = 0
+    return start_point,end_point
+
+def crop_img_points(img):
+    cos_vals = np.array([])
+    for i in range(img.shape[1]-1):
+        x = cosine(img[:,i],img[:,i+1])
+        cos_vals = np.append(cos_vals,(x))
+    col_start,col_end = find_start_end_points(cos_vals)
+
+    cos_vals = np.array([])
+    for i in range(img.shape[0]-1):
+        x = cosine(img[i,:],img[i+1,:])
+        cos_vals = np.append(cos_vals,(x))
+    row_start,row_end = find_start_end_points(cos_vals)
+
+    return row_start,row_end,col_start,col_end
