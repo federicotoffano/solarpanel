@@ -1,12 +1,16 @@
 import numpy as np
 import cv2
 import math
+from matplotlib import pyplot as plt
 
 # image rotation using Hough transform over Canny image
 def rotate_vertical_img(img):
     img_rows, img_cols = img.shape
-    canny_img = cv2.Canny(img, 50, 150, apertureSize=3)
+
+    smaller_img = cv2.resize(img, (0, 0), fx=0.5, fy=0.5)
+    canny_img = cv2.Canny(smaller_img, 50, 150, apertureSize=3)
     lines = cv2.HoughLines(canny_img, 1, np.pi / 180, 400)
+    lines_image = np.zeros((img_rows, img_cols), np.uint8)
     avr_theta = 0
     cnt_theta = 0
 
@@ -30,6 +34,44 @@ def rotate_vertical_img(img):
         # print lines
         #cv2.line(lines_image, (x1, y1), (x2, y2), 255, 1)
 
+    plt.imshow(lines_image, cmap='gray', interpolation='bicubic')
+    plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+    plt.show()
+
     M = cv2.getRotationMatrix2D((img_cols / 2, img_rows / 2), math.degrees(avr_theta), 1)
     return cv2.warpAffine(img, M, (img_cols, img_rows))
+
+def find_grid_rects(img, nCols, nRows):
+    img_rows, img_cols = img.shape
+    rects_image = np.zeros((img_rows, img_cols), np.uint8)
+
+    x_search = int(img_cols / (nCols * 2))
+    y_search = int(img_rows / (nRows * 2))
+
+    for i in range(nCols):
+        for j in range(nRows):
+            length = 1
+            height = 1
+            x2 = x_search * (1 + 2 * i) + 1
+            y = y_search * (1 + 2 * j)
+            while img.item(y, x2) != 255:
+                # img.itemset((y, x2), 255)
+                x2 += 1
+            x1 = x_search * (1 + 2 * i) - 1
+            y = y_search * (1 + 2 * j)
+            while img.item(y, x1) != 255:
+                # der_image.itemset((y, x1), 255)
+                x1 -= 1
+            x = x_search * (1 + 2 * i)
+            y2 = y_search * (1 + 2 * j) + 1
+            while img.item(y2, x) != 255:
+                # der_image.itemset((y2, x), 255)
+                y2 += 1
+            x = x_search * (1 + 2 * i)
+            y1 = y_search * (1 + 2 * j) - 1
+            while img.item(y1, x) != 255:
+                # der_image.itemset((y1, x), 255)
+                y1 -= 1
+            cv2.rectangle(img, (x1, y1), (x2, y2), 255, 1)
+    return img
 
