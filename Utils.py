@@ -200,6 +200,8 @@ def crop_img(file, offset=0, no_info_point=50):
     def rotate_vertical_img(img):
         img_rows, img_cols = img.shape
         canny_img = cv2.Canny(img, 50, 150, apertureSize=3)
+
+        #line_image = np.zeros((img_rows, img_cols), np.uint8)
         lines = cv2.HoughLines(canny_img, 1, np.pi / 180, 400)
 
         theta_arr = []
@@ -208,14 +210,27 @@ def crop_img(file, offset=0, no_info_point=50):
                 if abs(theta) < math.pi / 4:
                     theta_arr.append(theta)
                     print(theta)
+                if abs(theta) > math.pi - math.pi / 4:
+                    theta_arr.append(theta - math.pi)
+                    print(theta)
+                # a = np.cos(theta)
+                # b = np.sin(theta)
+                # x0 = a * rho
+                # y0 = b * rho
+                # x1 = int(x0 + 1000 * (-b))
+                # y1 = int(y0 + 1000 * (a))
+                # x2 = int(x0 - 1000 * (-b))
+                # y2 = int(y0 - 1000 * (a))
+                #
+                # cv2.line(line_image, (x1, y1), (x2, y2), 255, 2)
 
         elements = np.array(theta_arr)
 
         mean = np.mean(elements, axis=0)
         sd = np.std(elements, axis=0)
 
-        final_list = [x for x in theta_arr if (x > mean - 2 * sd)]
-        final_list = [x for x in final_list if (x < mean + 2 * sd)]
+        final_list = [x for x in theta_arr if (x >= mean - 2 * sd)]
+        final_list = [x for x in final_list if (x <= mean + 2 * sd)]
         print(final_list)
 
         print(np.mean(final_list))
