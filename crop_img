@@ -1,9 +1,9 @@
-def crop_img(file,no_info_point):
-    def plot(test_img,name):
-        plt.imshow(test_img)
-        plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
-        plt.imsave(Solar_imgs_tests_folder+name+'_'+str(img_name)+'.jpg',test_img)
+import cv2
+import math
+import numpy as np
+import copy as cp
 
+def crop_img(file,no_info_point):
     img_rbg = cv2.imread(file)
     img_grey_org = cv2.cvtColor(img_rbg,cv2.COLOR_BGR2GRAY)
     img_grey = cp.copy(img_grey_org)
