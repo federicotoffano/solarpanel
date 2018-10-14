@@ -4,6 +4,7 @@
     <extensionMap>
       <mapping pattern="dave" type="Python" />
       <mapping pattern="lo" type="Python" />
+      <mapping pattern="crop_img" type="Python" />
     </extensionMap>
   </component>
 </application>
