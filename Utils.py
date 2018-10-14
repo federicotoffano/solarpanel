@@ -142,32 +142,35 @@ def find_cells(img, offset_border, n_cols, n_rows, der_size=6, threshold=5, sear
     # searching rects given borders
     rects_image = np.zeros((img_rows, img_cols), np.uint8)
 
-    x_search = int(img_cols / (n_cols * 2))
-    y_search = int(img_rows / (n_rows * 2))
+    x_search = int((img_cols - 2*offset_border) / (n_cols * 2))
+    y_search = int((img_rows - 2*offset_border) / (n_rows * 2))
 
     for i in range(n_cols):
         for j in range(n_rows):
-            x2 = x_search * (1 + 2 * i) + 1
-            y = y_search * (1 + 2 * j)
+            x2 = x_search * (1 + 2 * i) + 1 + offset_border
+            y = y_search * (1 + 2 * j) + offset_border
             while der_image.item(y, x2) != 255:
-                # der_image.itemset((y, x2), 255)
+                der_image.itemset((y, x2), 255)
                 x2 += 1
-            x1 = x_search * (1 + 2 * i) - 1
-            y = y_search * (1 + 2 * j)
+            x1 = x_search * (1 + 2 * i) - 1 + offset_border
+            y = y_search * (1 + 2 * j) + offset_border
             while der_image.item(y, x1) != 255:
-                # der_image.itemset((y, x1), 255)
+                der_image.itemset((y, x1), 255)
                 x1 -= 1
-            x = x_search * (1 + 2 * i)
-            y2 = y_search * (1 + 2 * j) + 1
+            x = x_search * (1 + 2 * i) + offset_border
+            y2 = y_search * (1 + 2 * j) + 1 + offset_border
             while der_image.item(y2, x) != 255:
-                # der_image.itemset((y2, x), 255)
+                der_image.itemset((y2, x), 255)
                 y2 += 1
-            x = x_search * (1 + 2 * i)
-            y1 = y_search * (1 + 2 * j) - 1
+            x = x_search * (1 + 2 * i) + offset_border
+            y1 = y_search * (1 + 2 * j) - 1 + offset_border
             while der_image.item(y1, x) != 255:
-                # der_image.itemset((y1, x), 255)
+                der_image.itemset((y1, x), 255)
                 y1 -= 1
-            cv2.rectangle(rects_image, (x1, y1), (x2, y2), 255, 1)
+            cv2.rectangle(der_image, (x1, y1), (x2, y2), 255, 1)
+    plt.imshow(der_image, cmap='gray', interpolation='bicubic')
+    plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+    plt.show()
     return rects_image
 
 
