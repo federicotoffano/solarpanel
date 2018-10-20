@@ -174,7 +174,23 @@ def find_cells(img, offset_border, n_cols, n_rows, der_size=6, threshold=5, sear
     return rects_image
 
 
-def crop_img(file, offset=0, no_info_point=50):
+def find_cells2(cropped_img, n_rows, n_cols, cell_real_width, cell_real_height, cells_real_distance):
+    img_rows, img_cols = cropped_img.shape
+    mm_to_px_width = img_cols / (n_cols * cell_real_width + (n_cols - 1) * cells_real_distance)
+    mm_to_px_heigth = img_rows / (n_rows * cell_real_height + (n_rows - 1) * cells_real_distance)
+    cell_pixel_width = int(cell_real_width * mm_to_px_width)
+    cell_pixel_heigth = int(cell_real_height * mm_to_px_width)
+    for i in range(n_rows):
+        for j in range(n_cols):
+            offset_row = int((cell_real_height + cells_real_distance) * i * mm_to_px_heigth)
+            offset_col = int((cell_real_width + cells_real_distance) * j * mm_to_px_width)
+            cv2.rectangle(cropped_img, (offset_col, offset_row), (offset_col + cell_pixel_width, offset_row + cell_pixel_heigth),
+                          0, int((cells_real_distance+3) * mm_to_px_width))
+
+    return None
+
+
+def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove_label = False):
     img_rbg = cv2.imread(file)
     img_grey_org = cv2.cvtColor(img_rbg,cv2.COLOR_BGR2GRAY)
     img_grey = cp.copy(img_grey_org)
@@ -234,7 +250,7 @@ def crop_img(file, offset=0, no_info_point=50):
 
         final_list = [x for x in theta_arr if (x >= mean - 2 * sd)]
         final_list = [x for x in final_list if (x <= mean + 2 * sd)]
-        print(final_list)
+        #print(final_list)
 
         print(np.mean(final_list))
         M = cv2.getRotationMatrix2D((img_cols / 2, img_rows / 2), math.degrees(np.mean(final_list)), 1)
@@ -256,10 +272,87 @@ def crop_img(file, offset=0, no_info_point=50):
                 break
         return start_point,end_point
 
-    img = remove_white_label(img)
+
+    def cpmpute_homography(img):
+        img_rows, img_cols = img.shape
+        corner_size = offset_background + int(min(img_rows / n_rows / 4, img_cols / n_cols / 4))
+
+        g_size = 15
+        canny_t1, canny_t2 = 5, 100
+
+        tl_corner = img[0:corner_size, 0:corner_size]
+        tl_corner = cv2.GaussianBlur(tl_corner, (g_size, g_size), 0)
+        tl_corner_canny = cv2.Canny(tl_corner, canny_t1, canny_t2)
+        tr_corner = img[0:corner_size, img_cols - corner_size:img_cols]
+        tr_corner = cv2.GaussianBlur(tr_corner, (g_size, g_size), 0)
+        tr_corner_canny = cv2.Canny(tr_corner, canny_t1, canny_t2)
+        bl_corner = img[img_rows - corner_size:img_rows, 0:corner_size]
+        bl_corner = cv2.GaussianBlur(bl_corner, (g_size, g_size), 0)
+        bl_corner_canny = cv2.Canny(bl_corner, canny_t1, canny_t2)
+        br_corner = img[img_rows - corner_size:img_rows, img_cols - corner_size:img_cols]
+        br_corner = cv2.GaussianBlur(br_corner, (g_size, g_size), 0)
+        br_corner_canny = cv2.Canny(br_corner, canny_t1, canny_t2)
+
+        tl_point = [float("inf"), float("inf")]
+        tr_point = [float("inf"), -float("inf")]
+        bl_point = [-float("inf"), float("inf")]
+        br_point = [-float("inf"), -float("inf")]
+        for col in range(corner_size):
+            for row in range(corner_size):
+                if tl_corner_canny.item(row, col) == 255:
+                    if col < tl_point[1]: tl_point[1] = col
+                    if row < tl_point[0]: tl_point[0] = row
+                if tr_corner_canny.item(row, col) == 255:
+                    if col > tr_point[1]: tr_point[1] = col
+                    if row < tr_point[0]: tr_point[0] = row
+                if bl_corner_canny.item(row, col) == 255:
+                    if col < bl_point[1]: bl_point[1] = col
+                    if row > bl_point[0]: bl_point[0] = row
+                if br_corner_canny.item(row, col) == 255:
+                    if col > br_point[1]: br_point[1] = col
+                    if row > br_point[0]: br_point[0] = row
+
+        # tl_corner_canny.itemset((tl_point[0], tl_point[1]), 255)
+        # plt.imshow(tl_corner_canny, cmap='gray', interpolation='bicubic')
+        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        # plt.show()
+        #
+        # tr_corner_canny.itemset((tr_point[0], tr_point[1]), 255)
+        # plt.imshow(tr_corner_canny, cmap='gray', interpolation='bicubic')
+        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        # plt.show()
+        #
+        # bl_corner_canny.itemset((bl_point[0], bl_point[1]), 255)
+        # plt.imshow(bl_corner_canny, cmap='gray', interpolation='bicubic')
+        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        # plt.show()
+        #
+        # br_corner_canny.itemset((br_point[0], br_point[1]), 255)
+        # plt.imshow(br_corner_canny, cmap='gray', interpolation='bicubic')
+        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        # plt.show()
+
+        # !!! be careful, on the image [row, col], on the set of points for homography [col, row]
+        tl_point_opp = [tl_point[1] + 0, tl_point[0] + 0]
+        tr_point_opp = [tr_point[1] + img_cols - corner_size, tr_point[0] + 0]
+        bl_point_opp = [bl_point[1] + 0, bl_point[0] + img_rows - corner_size]
+        br_point_opp = [br_point[1] + img_cols - corner_size, br_point[0] + img_rows - corner_size]
+
+        prespective_rows, prespective_cols = img_rows - offset_background * 2, img_cols - offset_background * 2
+
+        pts1 = np.float32([tl_point_opp, tr_point_opp, bl_point_opp, br_point_opp])
+        pts2 = np.float32([[0, 0], [prespective_cols, 0], [0, prespective_rows], [prespective_cols, prespective_rows]])
+
+        h, status = cv2.findHomography(pts1, pts2)
+
+        return cv2.warpPerspective(img, h, (prespective_cols, prespective_rows))
+
+    if remove_label:
+        img = remove_white_label(img)
     img = rotate_vertical_img(img)
     img = cv2.GaussianBlur(img, (15, 15), 0) # smoothen
     img = cv2.Canny(img, 5, 100) #detect edges
+
 
     cos_vals = np.array([])
     for i in range(img.shape[1]-1):
@@ -273,4 +366,10 @@ def crop_img(file, offset=0, no_info_point=50):
         cos_vals = np.append(cos_vals,(x))
     row_start,row_end = find_start_end_points(cos_vals)
 
-    return rotate_vertical_img(img_grey_org)[row_start - offset:row_end + offset, col_start - offset:col_end + offset]
+    cropped_img = rotate_vertical_img(img_grey_org)[row_start - offset_background:row_end + offset_background, col_start - offset_background:col_end + offset_background]
+
+    # plt.imshow(cropped_img, cmap='gray', interpolation='bicubic')
+    # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+    # plt.show()
+
+    return cpmpute_homography(cropped_img)
