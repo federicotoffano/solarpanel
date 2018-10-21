@@ -185,7 +185,7 @@ def find_cells2(cropped_img, n_rows, n_cols, cell_real_width, cell_real_height, 
             offset_row = int((cell_real_height + cells_real_distance) * i * mm_to_px_heigth)
             offset_col = int((cell_real_width + cells_real_distance) * j * mm_to_px_width)
             cv2.rectangle(cropped_img, (offset_col, offset_row), (offset_col + cell_pixel_width, offset_row + cell_pixel_heigth),
-                          0, int((cells_real_distance) * mm_to_px_width))
+                          0, int((cells_real_distance + 3) * mm_to_px_width))
 
     return None
 
@@ -345,7 +345,7 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
         # plt.show()
 
 
-        # Left and right cells
+        # # Left and right cells
         mid_cell_l_px = ((bl_point[0] + img_rows - box_size) - tl_point[0]) / (n_rows * 2)
         mid_cell_r_px = ((br_point[0] + img_rows - box_size) - tr_point[0]) / (n_rows * 2)
         mid_cell_prespective = prespective_rows / (n_rows * 2)
@@ -369,37 +369,6 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
             r_point = [r_point_row, ext_right[0] + img_cols - box_size]
             pts1.append([r_point[1], r_point[0]])
             pts2.append([prespective_cols, int(mid_cell_prespective * (1 + 2 * j))])
-
-        # # Left and right cells
-        # mid_cell_l_px = ((bl_point[0] + img_rows - box_size) - tl_point[0]) / (n_rows)
-        # mid_cell_r_px = ((br_point[0] + img_rows - box_size) - tr_point[0]) / (n_rows)
-        # mid_cell_prespective = prespective_rows / (n_rows * 2)
-        # for j in range(n_rows - 1):
-        #     l_point_row = tl_point[0] + int(mid_cell_l_px * (1 + j))
-        #     l_box = img[l_point_row - int(box_size / 2):l_point_row + int(box_size / 2), 0:box_size]
-        #     ret, thresh = cv2.threshold(l_box, contour_t1, contour_t2, 0)
-        #     im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        #     c = max(contours, key=cv2.contourArea)
-        #     ext_left = tuple(c[c[:, :, 0].argmin()][0])
-        #     l_point = [l_point_row, ext_left[0]]
-        #     pts1.append([l_point[1], l_point[0]])
-        #     pts2.append([0, int(mid_cell_prespective * (1 + 2 * j))])
-        #
-        #     plt.imshow(l_box, cmap='gray', interpolation='bicubic')
-        #     plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
-        #     plt.show()
-        #
-        #     r_point_row = tr_point[0] + int(mid_cell_r_px * (1 + 2 * j))
-        #     r_box = img[r_point_row - int(box_size / 2):r_point_row + int(box_size / 2), img_cols - box_size:img_cols]
-        #     ret, thresh = cv2.threshold(r_box, contour_t1, contour_t2, 0)
-        #     im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        #     c = max(contours, key=cv2.contourArea)
-        #     ext_right = tuple(c[c[:, :, 0].argmax()][0])
-        #     r_point = [r_point_row, ext_right[0] + img_cols - box_size]
-        #     pts1.append([r_point[1], r_point[0]])
-        #     pts2.append([prespective_cols, int(mid_cell_prespective * (1 + 2 * j))])
-
-            # cv2.drawContours(r_box, contours, -1, 0, 7)
 
         # Top and bottom cells
         mid_cell_l_col_px = ((tr_point[1] + img_cols - box_size) - tl_point[1]) / (n_cols * 2)
@@ -426,13 +395,79 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
             pts1.append([b_point[1], b_point[0]])
             pts2.append([int(mid_cell_col_prespective * (1 + 2 * j)), prespective_rows])
 
-            # cv2.drawContours(r_box, contours, -1, 0, 7)
+            #cv2.drawContours(r_box, contours, -1, 0, 7)
 
         pts1 = np.float32(pts1)
         pts2 = np.float32(pts2)
         h, status = cv2.findHomography(pts1, pts2)
 
-        return cv2.warpPerspective(img, h, (prespective_cols, prespective_rows))
+        # compuatation of the first homography
+        hom_img = cv2.warpPerspective(img, h, (prespective_cols, prespective_rows))
+        img_rows, img_cols = hom_img.shape
+
+        box_size = int(box_size/2)
+        pts1 = list([])
+        pts2 = list([])
+
+        # Left and right cells
+        cell_height_px = img_rows / n_rows
+        for j in range(n_rows - 1):
+            cell_point_row = int(cell_height_px * (1 + j))
+
+            l_box = hom_img[cell_point_row - int(box_size / 2):cell_point_row + int(box_size / 2), 0:box_size]
+            ret, thresh = cv2.threshold(l_box, contour_t1, contour_t2, 0)
+            im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            # find row with minimum n of black pixels
+            colwise = np.array([])
+            for ii in range(im2.shape[0]):
+                colwise = np.append(colwise, np.count_nonzero(im2[ii, :] == 255))
+            real_cell_point_row = np.argmin(colwise)
+            pts1.append([0, cell_point_row - int(box_size / 2) + real_cell_point_row])
+            pts2.append([0, cell_point_row])
+
+            r_box = hom_img[cell_point_row - int(box_size / 2):cell_point_row + int(box_size / 2), img_cols - box_size:img_cols]
+            ret, thresh = cv2.threshold(r_box, contour_t1, contour_t2, 0)
+            im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            # find row with minimum n of black pixels
+            colwise = np.array([])
+            for ii in range(im2.shape[0]):
+                colwise = np.append(colwise, np.count_nonzero(im2[ii, :] == 255))
+            real_cell_point_row = np.argmin(colwise)
+            pts1.append([img_cols, cell_point_row - int(box_size / 2) + real_cell_point_row])
+            pts2.append([img_cols, cell_point_row])
+
+        # top and bottom cells
+        cell_width_px = img_cols / n_cols
+        for j in range(n_cols - 1):
+            cell_point_col = int(cell_width_px * (1 + j))
+
+            l_box = hom_img[0:box_size, cell_point_col - int(box_size / 2):cell_point_col + int(box_size / 2)]
+            ret, thresh = cv2.threshold(l_box, contour_t1, contour_t2, 0)
+            im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            # find col with minimum n of black pixels
+            rowwise = np.array([])
+            for ii in range(im2.shape[1]):
+                rowwise = np.append(rowwise, np.count_nonzero(im2[:, ii] == 255))
+            real_cell_point_col = np.argmin(rowwise)
+            pts1.append([cell_point_col - int(box_size / 2) + real_cell_point_col, 0])
+            pts2.append([cell_point_col, 0])
+
+            r_box = hom_img[img_rows - box_size:img_rows, cell_point_col - int(box_size / 2):cell_point_col + int(box_size / 2)]
+            ret, thresh = cv2.threshold(r_box, contour_t1, contour_t2, 0)
+            im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            # find row with minimum n of black pixels
+            rowwise = np.array([])
+            for ii in range(im2.shape[1]):
+                rowwise = np.append(rowwise, np.count_nonzero(im2[:, ii] == 255))
+            real_cell_point_col = np.argmin(rowwise)
+            pts1.append([cell_point_col - int(box_size / 2) + real_cell_point_col, img_rows])
+            pts2.append([cell_point_col, img_rows])
+
+
+        pts1 = np.float32(pts1)
+        pts2 = np.float32(pts2)
+        h, status = cv2.findHomography(pts1, pts2)
+        return cv2.warpPerspective(hom_img, h, (prespective_cols, prespective_rows))
 
     if remove_label:
         img = remove_white_label(img)
