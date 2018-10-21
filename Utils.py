@@ -185,12 +185,12 @@ def find_cells2(cropped_img, n_rows, n_cols, cell_real_width, cell_real_height, 
             offset_row = int((cell_real_height + cells_real_distance) * i * mm_to_px_heigth)
             offset_col = int((cell_real_width + cells_real_distance) * j * mm_to_px_width)
             cv2.rectangle(cropped_img, (offset_col, offset_row), (offset_col + cell_pixel_width, offset_row + cell_pixel_heigth),
-                          0, int((cells_real_distance+3) * mm_to_px_width))
+                          0, int((cells_real_distance) * mm_to_px_width))
 
     return None
 
 
-def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove_label = False):
+def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove_label=False):
     img_rbg = cv2.imread(file)
     img_grey_org = cv2.cvtColor(img_rbg,cv2.COLOR_BGR2GRAY)
     img_grey = cp.copy(img_grey_org)
@@ -275,74 +275,161 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
 
     def cpmpute_homography(img):
         img_rows, img_cols = img.shape
-        corner_size = offset_background + int(min(img_rows / n_rows / 4, img_cols / n_cols / 4))
-
-        g_size = 15
-        canny_t1, canny_t2 = 5, 100
-
-        tl_corner = img[0:corner_size, 0:corner_size]
-        tl_corner = cv2.GaussianBlur(tl_corner, (g_size, g_size), 0)
-        tl_corner_canny = cv2.Canny(tl_corner, canny_t1, canny_t2)
-        tr_corner = img[0:corner_size, img_cols - corner_size:img_cols]
-        tr_corner = cv2.GaussianBlur(tr_corner, (g_size, g_size), 0)
-        tr_corner_canny = cv2.Canny(tr_corner, canny_t1, canny_t2)
-        bl_corner = img[img_rows - corner_size:img_rows, 0:corner_size]
-        bl_corner = cv2.GaussianBlur(bl_corner, (g_size, g_size), 0)
-        bl_corner_canny = cv2.Canny(bl_corner, canny_t1, canny_t2)
-        br_corner = img[img_rows - corner_size:img_rows, img_cols - corner_size:img_cols]
-        br_corner = cv2.GaussianBlur(br_corner, (g_size, g_size), 0)
-        br_corner_canny = cv2.Canny(br_corner, canny_t1, canny_t2)
-
-        tl_point = [float("inf"), float("inf")]
-        tr_point = [float("inf"), -float("inf")]
-        bl_point = [-float("inf"), float("inf")]
-        br_point = [-float("inf"), -float("inf")]
-        for col in range(corner_size):
-            for row in range(corner_size):
-                if tl_corner_canny.item(row, col) == 255:
-                    if col < tl_point[1]: tl_point[1] = col
-                    if row < tl_point[0]: tl_point[0] = row
-                if tr_corner_canny.item(row, col) == 255:
-                    if col > tr_point[1]: tr_point[1] = col
-                    if row < tr_point[0]: tr_point[0] = row
-                if bl_corner_canny.item(row, col) == 255:
-                    if col < bl_point[1]: bl_point[1] = col
-                    if row > bl_point[0]: bl_point[0] = row
-                if br_corner_canny.item(row, col) == 255:
-                    if col > br_point[1]: br_point[1] = col
-                    if row > br_point[0]: br_point[0] = row
-
-        # tl_corner_canny.itemset((tl_point[0], tl_point[1]), 255)
-        # plt.imshow(tl_corner_canny, cmap='gray', interpolation='bicubic')
-        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
-        # plt.show()
-        #
-        # tr_corner_canny.itemset((tr_point[0], tr_point[1]), 255)
-        # plt.imshow(tr_corner_canny, cmap='gray', interpolation='bicubic')
-        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
-        # plt.show()
-        #
-        # bl_corner_canny.itemset((bl_point[0], bl_point[1]), 255)
-        # plt.imshow(bl_corner_canny, cmap='gray', interpolation='bicubic')
-        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
-        # plt.show()
-        #
-        # br_corner_canny.itemset((br_point[0], br_point[1]), 255)
-        # plt.imshow(br_corner_canny, cmap='gray', interpolation='bicubic')
-        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
-        # plt.show()
-
-        # !!! be careful, on the image [row, col], on the set of points for homography [col, row]
-        tl_point_opp = [tl_point[1] + 0, tl_point[0] + 0]
-        tr_point_opp = [tr_point[1] + img_cols - corner_size, tr_point[0] + 0]
-        bl_point_opp = [bl_point[1] + 0, bl_point[0] + img_rows - corner_size]
-        br_point_opp = [br_point[1] + img_cols - corner_size, br_point[0] + img_rows - corner_size]
-
         prespective_rows, prespective_cols = img_rows - offset_background * 2, img_cols - offset_background * 2
+        pts1 = list([])
+        pts2 = list([])
 
-        pts1 = np.float32([tl_point_opp, tr_point_opp, bl_point_opp, br_point_opp])
-        pts2 = np.float32([[0, 0], [prespective_cols, 0], [0, prespective_rows], [prespective_cols, prespective_rows]])
+        box_size = offset_background + int(min(img_rows / n_rows / 4, img_cols / n_cols / 4))
 
+        contour_t1, contour_t2 = 127, 255
+
+        tl_corner = img[0:box_size, 0:box_size]
+        ret, thresh = cv2.threshold(tl_corner, contour_t1, contour_t2, 0)
+        im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        c = max(contours, key=cv2.contourArea)
+        ext_left = tuple(c[c[:, :, 0].argmin()][0])
+        ext_top = tuple(c[c[:, :, 1].argmin()][0])
+        tl_point = [ext_top[1], ext_left[0]]
+        # !!! be careful, on the image [row, col], on the set of points for homography [col, row]
+        pts1.append([tl_point[1] + 0, tl_point[0] + 0])
+        pts2.append([0, 0])
+
+        tr_corner = img[0:box_size, img_cols - box_size:img_cols]
+        ret, thresh = cv2.threshold(tr_corner, contour_t1, contour_t2, 0)
+        im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        c = max(contours, key=cv2.contourArea)
+        ext_right = tuple(c[c[:, :, 0].argmax()][0])
+        ext_top = tuple(c[c[:, :, 1].argmin()][0])
+        tr_point = [ext_top[1], ext_right[0]]
+        pts1.append([tr_point[1] + img_cols - box_size, tr_point[0] + 0])
+        pts2.append([prespective_cols, 0])
+
+        bl_corner = img[img_rows - box_size:img_rows, 0:box_size]
+        ret, thresh = cv2.threshold(bl_corner, contour_t1, contour_t2, 0)
+        im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        c = max(contours, key=cv2.contourArea)
+        ext_left = tuple(c[c[:, :, 0].argmin()][0])
+        ext_bot = tuple(c[c[:, :, 1].argmax()][0])
+        bl_point = [ext_bot[1], ext_left[0]]
+        pts1.append([bl_point[1] + 0, bl_point[0] + img_rows - box_size])
+        pts2.append([0, prespective_rows])
+
+        br_corner = img[img_rows - box_size:img_rows, img_cols - box_size:img_cols]
+        ret, thresh = cv2.threshold(br_corner, contour_t1, contour_t2, 0)
+        im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        c = max(contours, key=cv2.contourArea)
+        ext_right = tuple(c[c[:, :, 0].argmax()][0])
+        ext_bot = tuple(c[c[:, :, 1].argmax()][0])
+        br_point = [ext_bot[1], ext_right[0]]
+        pts1.append([br_point[1] + img_cols - box_size, br_point[0] + img_rows - box_size])
+        pts2.append([prespective_cols, prespective_rows])
+
+        # tl_corner.itemset((tl_point[0], tl_point[1]), 255)
+        # plt.imshow(tl_corner, cmap='gray', interpolation='bicubic')
+        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        # plt.show()
+        #
+        # tr_corner.itemset((tr_point[0], tr_point[1]), 255)
+        # plt.imshow(tr_corner, cmap='gray', interpolation='bicubic')
+        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        # plt.show()
+        #
+        # bl_corner.itemset((bl_point[0], bl_point[1]), 255)
+        # plt.imshow(bl_corner, cmap='gray', interpolation='bicubic')
+        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        # plt.show()
+        #
+        # br_corner.itemset((br_point[0], br_point[1]), 255)
+        # plt.imshow(br_corner, cmap='gray', interpolation='bicubic')
+        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        # plt.show()
+
+
+        # Left and right cells
+        mid_cell_l_px = ((bl_point[0] + img_rows - box_size) - tl_point[0]) / (n_rows * 2)
+        mid_cell_r_px = ((br_point[0] + img_rows - box_size) - tr_point[0]) / (n_rows * 2)
+        mid_cell_prespective = prespective_rows / (n_rows * 2)
+        for j in range(n_rows):
+            l_point_row = tl_point[0] + int(mid_cell_l_px * (1 + 2 * j))
+            l_box = img[l_point_row - int(box_size / 2):l_point_row + int(box_size / 2), 0:box_size]
+            ret, thresh = cv2.threshold(l_box, contour_t1, contour_t2, 0)
+            im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            c = max(contours, key=cv2.contourArea)
+            ext_left = tuple(c[c[:, :, 0].argmin()][0])
+            l_point = [l_point_row, ext_left[0]]
+            pts1.append([l_point[1], l_point[0]])
+            pts2.append([0, int(mid_cell_prespective * (1 + 2 * j))])
+
+            r_point_row = tr_point[0] + int(mid_cell_r_px * (1 + 2 * j))
+            r_box = img[r_point_row - int(box_size / 2):r_point_row + int(box_size / 2), img_cols - box_size:img_cols]
+            ret, thresh = cv2.threshold(r_box, contour_t1, contour_t2, 0)
+            im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            c = max(contours, key=cv2.contourArea)
+            ext_right = tuple(c[c[:, :, 0].argmax()][0])
+            r_point = [r_point_row, ext_right[0] + img_cols - box_size]
+            pts1.append([r_point[1], r_point[0]])
+            pts2.append([prespective_cols, int(mid_cell_prespective * (1 + 2 * j))])
+
+        # # Left and right cells
+        # mid_cell_l_px = ((bl_point[0] + img_rows - box_size) - tl_point[0]) / (n_rows)
+        # mid_cell_r_px = ((br_point[0] + img_rows - box_size) - tr_point[0]) / (n_rows)
+        # mid_cell_prespective = prespective_rows / (n_rows * 2)
+        # for j in range(n_rows - 1):
+        #     l_point_row = tl_point[0] + int(mid_cell_l_px * (1 + j))
+        #     l_box = img[l_point_row - int(box_size / 2):l_point_row + int(box_size / 2), 0:box_size]
+        #     ret, thresh = cv2.threshold(l_box, contour_t1, contour_t2, 0)
+        #     im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        #     c = max(contours, key=cv2.contourArea)
+        #     ext_left = tuple(c[c[:, :, 0].argmin()][0])
+        #     l_point = [l_point_row, ext_left[0]]
+        #     pts1.append([l_point[1], l_point[0]])
+        #     pts2.append([0, int(mid_cell_prespective * (1 + 2 * j))])
+        #
+        #     plt.imshow(l_box, cmap='gray', interpolation='bicubic')
+        #     plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        #     plt.show()
+        #
+        #     r_point_row = tr_point[0] + int(mid_cell_r_px * (1 + 2 * j))
+        #     r_box = img[r_point_row - int(box_size / 2):r_point_row + int(box_size / 2), img_cols - box_size:img_cols]
+        #     ret, thresh = cv2.threshold(r_box, contour_t1, contour_t2, 0)
+        #     im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        #     c = max(contours, key=cv2.contourArea)
+        #     ext_right = tuple(c[c[:, :, 0].argmax()][0])
+        #     r_point = [r_point_row, ext_right[0] + img_cols - box_size]
+        #     pts1.append([r_point[1], r_point[0]])
+        #     pts2.append([prespective_cols, int(mid_cell_prespective * (1 + 2 * j))])
+
+            # cv2.drawContours(r_box, contours, -1, 0, 7)
+
+        # Top and bottom cells
+        mid_cell_l_col_px = ((tr_point[1] + img_cols - box_size) - tl_point[1]) / (n_cols * 2)
+        mid_cell_r_col_px = ((br_point[1] + img_cols - box_size) - bl_point[1]) / (n_cols * 2)
+        mid_cell_col_prespective = prespective_cols / (n_cols * 2)
+        for j in range(n_cols):
+            t_point_col = tl_point[1] + int(mid_cell_l_col_px * (1 + 2 * j))
+            t_box = img[0:box_size, t_point_col - int(box_size / 2):t_point_col + int(box_size / 2)]
+            ret, thresh = cv2.threshold(t_box, contour_t1, contour_t2, 0)
+            im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            c = max(contours, key=cv2.contourArea)
+            ext_top = tuple(c[c[:, :, 1].argmin()][0])
+            t_point = [ext_top[1], t_point_col]
+            pts1.append([t_point[1], t_point[0]])
+            pts2.append([int(mid_cell_col_prespective * (1 + 2 * j)), 0])
+
+            b_point_col = bl_point[1] + int(mid_cell_r_col_px * (1 + 2 * j))
+            b_box = img[img_rows - box_size:img_rows, b_point_col - int(box_size / 2):b_point_col + int(box_size / 2)]
+            ret, thresh = cv2.threshold(b_box, contour_t1, contour_t2, 0)
+            im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            c = max(contours, key=cv2.contourArea)
+            ext_bot = tuple(c[c[:, :, 1].argmax()][0])
+            b_point = [ext_bot[1] + img_rows - box_size, b_point_col]
+            pts1.append([b_point[1], b_point[0]])
+            pts2.append([int(mid_cell_col_prespective * (1 + 2 * j)), prespective_rows])
+
+            # cv2.drawContours(r_box, contours, -1, 0, 7)
+
+        pts1 = np.float32(pts1)
+        pts2 = np.float32(pts2)
         h, status = cv2.findHomography(pts1, pts2)
 
         return cv2.warpPerspective(img, h, (prespective_cols, prespective_rows))
@@ -350,8 +437,12 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
     if remove_label:
         img = remove_white_label(img)
     img = rotate_vertical_img(img)
+
     img = cv2.GaussianBlur(img, (15, 15), 0) # smoothen
     img = cv2.Canny(img, 5, 100) #detect edges
+    # plt.imshow(img, cmap='gray', interpolation='bicubic')
+    # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+    # plt.show()
 
 
     cos_vals = np.array([])
@@ -367,6 +458,8 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
     row_start,row_end = find_start_end_points(cos_vals)
 
     cropped_img = rotate_vertical_img(img_grey_org)[row_start - offset_background:row_end + offset_background, col_start - offset_background:col_end + offset_background]
+
+
 
     # plt.imshow(cropped_img, cmap='gray', interpolation='bicubic')
     # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
