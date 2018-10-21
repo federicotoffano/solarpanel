@@ -5,6 +5,73 @@ import math
 from matplotlib import pyplot as plt
 
 
+def get_border_and_pad(dim, cell_thick, border_thick, pad_border, pixels_mov_avg=20):
+    def floor(n):
+        return int(np.floor(n))
+
+    def ceil(n):
+        return int(np.ceil(n))
+
+    first_mid_point = cell_thick + 0.5 * border_thick
+    mid_points = [first_mid_point]
+    left_in = [first_mid_point - 0.5 * pad_border]
+    left_out = [first_mid_point - pixels_mov_avg - 0.5 * pad_border]
+    right_in = [first_mid_point + 0.5 * pad_border]
+    right_out = [first_mid_point + pixels_mov_avg + 0.5 * pad_border]
+    for i in range(1, dim - 1):
+        mid_p = first_mid_point + i * (cell_thick + border_thick)
+        mid_points.append(mid_p)
+        left_in.append(mid_p - 0.5 * pad_border)
+        left_out.append(mid_p - pixels_mov_avg - 0.5 * pad_border)
+        right_in.append(mid_p + 0.5 * pad_border)
+        right_out.append(mid_p + pixels_mov_avg + 0.5 * pad_border)
+
+    return list(map(floor, left_in)), list(map(floor, left_out)), list(map(ceil, right_in)), \
+           list(map(ceil, right_out)), list(map(int, mid_points))
+
+
+# %%
+def remove_borders(cropped_img, n_rows, n_cols, cell_real_width, cell_real_height, cells_real_distance,
+                   medium_kernel=15, increase_border=6):
+    y_border_thick = cells_real_distance * (
+                cropped_img.shape[0] / ((n_rows * cell_real_width) + ((n_rows - 1) * cells_real_distance)))
+    x_border_thick = cells_real_distance * (
+                cropped_img.shape[1] / ((n_cols * cell_real_height) + ((n_cols - 1) * cells_real_distance)))
+    border_thick = np.mean([x_border_thick, y_border_thick])
+    y_cell_thick = cell_real_width * (
+                cropped_img.shape[0] / ((n_rows * cell_real_width) + ((n_rows - 1) * cells_real_distance)))
+    x_cell_thick = cell_real_height * (
+                cropped_img.shape[1] / ((n_cols * cell_real_height) + ((n_cols - 1) * cells_real_distance)))
+    cell_thick = np.mean([x_cell_thick, y_cell_thick])
+    pad_border = increase_border * border_thick
+
+    # horizontal borders
+    left_in, left_out, right_in, right_out, mid_points = get_border_and_pad(n_rows, cell_thick, border_thick,
+                                                                            pad_border)
+    for col in range(cropped_img.shape[1]):
+        for borders in range(len(mid_points)):
+            left_val = np.mean(cropped_img[left_out[borders]:left_in[borders], col])
+            right_val = np.mean(cropped_img[right_in[borders]:right_out[borders], col])
+            border_val = np.linspace(left_val, right_val, right_in[borders] - left_in[borders])
+            list(map(int, border_val))
+            cropped_img[left_in[borders]:right_in[borders], col] = border_val
+
+    # vertical borders
+    left_in, left_out, right_in, right_out, mid_points = get_border_and_pad(n_cols, cell_thick, border_thick,
+                                                                            pad_border)
+    for row in range(cropped_img.shape[0]):
+        for borders in range(len(mid_points)):
+            left_val = np.mean(cropped_img[row, left_out[borders]:left_in[borders]])
+            right_val = np.mean(cropped_img[row, right_in[borders]:right_out[borders]])
+            border_val = np.linspace(left_val, right_val, right_in[borders] - left_in[borders])
+            list(map(int, border_val))
+            cropped_img[row, left_in[borders]:right_in[borders]] = border_val
+
+    img_medianBlur = cv2.medianBlur(cropped_img, medium_kernel)
+    return cropped_img
+
+
+
 def find_cells(img, offset_border, n_cols, n_rows, der_size=6, threshold=5, search_area=25):
     # offset_border = width of visible background
     # n_cols = n cell along columns
@@ -187,7 +254,7 @@ def find_cells2(cropped_img, n_rows, n_cols, cell_real_width, cell_real_height, 
             cv2.rectangle(cropped_img, (offset_col, offset_row), (offset_col + cell_pixel_width, offset_row + cell_pixel_heigth),
                           0, int((cells_real_distance + 3) * mm_to_px_width))
 
-    return None
+    return cropped_img
 
 
 def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove_label=False):
@@ -281,7 +348,7 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
 
         box_size = offset_background + int(min(img_rows / n_rows / 4, img_cols / n_cols / 4))
 
-        contour_t1, contour_t2 = 127, 255
+        contour_t1, contour_t2 = 100, 255
 
         tl_corner = img[0:box_size, 0:box_size]
         ret, thresh = cv2.threshold(tl_corner, contour_t1, contour_t2, 0)
@@ -293,6 +360,10 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
         # !!! be careful, on the image [row, col], on the set of points for homography [col, row]
         pts1.append([tl_point[1] + 0, tl_point[0] + 0])
         pts2.append([0, 0])
+        #
+        plt.imshow(im2, cmap='gray', interpolation='bicubic')
+        plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        plt.show()
 
         tr_corner = img[0:box_size, img_cols - box_size:img_cols]
         ret, thresh = cv2.threshold(tr_corner, contour_t1, contour_t2, 0)
@@ -405,9 +476,10 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
         hom_img = cv2.warpPerspective(img, h, (prespective_cols, prespective_rows))
         img_rows, img_cols = hom_img.shape
 
+
         box_size = int(box_size/2)
-        pts1 = list([])
-        pts2 = list([])
+        pts1 = list([[0, 0], [0, img_rows], [img_cols, 0], [img_cols, img_rows]])
+        pts2 = list([[0, 0], [0, img_rows], [img_cols, 0], [img_cols, img_rows]])
 
         # Left and right cells
         cell_height_px = img_rows / n_rows
@@ -421,9 +493,13 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
             colwise = np.array([])
             for ii in range(im2.shape[0]):
                 colwise = np.append(colwise, np.count_nonzero(im2[ii, :] == 255))
-            real_cell_point_row = np.argmin(colwise)
+            real_cell_point_row = int(np.mean(np.argwhere(colwise < np.min(colwise)+3)))
             pts1.append([0, cell_point_row - int(box_size / 2) + real_cell_point_row])
             pts2.append([0, cell_point_row])
+
+            # plt.imshow(im2, cmap='gray', interpolation='bicubic')
+            # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+            # plt.show()
 
             r_box = hom_img[cell_point_row - int(box_size / 2):cell_point_row + int(box_size / 2), img_cols - box_size:img_cols]
             ret, thresh = cv2.threshold(r_box, contour_t1, contour_t2, 0)
@@ -432,11 +508,11 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
             colwise = np.array([])
             for ii in range(im2.shape[0]):
                 colwise = np.append(colwise, np.count_nonzero(im2[ii, :] == 255))
-            real_cell_point_row = np.argmin(colwise)
+            real_cell_point_row =  int(np.mean(np.argwhere(colwise < np.min(colwise)+3)))
             pts1.append([img_cols, cell_point_row - int(box_size / 2) + real_cell_point_row])
             pts2.append([img_cols, cell_point_row])
 
-        # top and bottom cells
+        # # top and bottom cells
         cell_width_px = img_cols / n_cols
         for j in range(n_cols - 1):
             cell_point_col = int(cell_width_px * (1 + j))
@@ -444,11 +520,16 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
             l_box = hom_img[0:box_size, cell_point_col - int(box_size / 2):cell_point_col + int(box_size / 2)]
             ret, thresh = cv2.threshold(l_box, contour_t1, contour_t2, 0)
             im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+            # plt.imshow(im2, cmap='gray', interpolation='bicubic')
+            # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+            # plt.show()
+
             # find col with minimum n of black pixels
             rowwise = np.array([])
             for ii in range(im2.shape[1]):
                 rowwise = np.append(rowwise, np.count_nonzero(im2[:, ii] == 255))
-            real_cell_point_col = np.argmin(rowwise)
+            real_cell_point_col = int(np.mean(np.argwhere(rowwise < np.min(rowwise)+3)))
             pts1.append([cell_point_col - int(box_size / 2) + real_cell_point_col, 0])
             pts2.append([cell_point_col, 0])
 
@@ -459,14 +540,18 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
             rowwise = np.array([])
             for ii in range(im2.shape[1]):
                 rowwise = np.append(rowwise, np.count_nonzero(im2[:, ii] == 255))
-            real_cell_point_col = np.argmin(rowwise)
+            real_cell_point_col =  int(np.mean(np.argwhere(rowwise < np.min(rowwise)+3)))
             pts1.append([cell_point_col - int(box_size / 2) + real_cell_point_col, img_rows])
             pts2.append([cell_point_col, img_rows])
-
 
         pts1 = np.float32(pts1)
         pts2 = np.float32(pts2)
         h, status = cv2.findHomography(pts1, pts2)
+
+        plt.imshow(hom_img, cmap='gray', interpolation='bicubic')
+        plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        plt.show()
+
         return cv2.warpPerspective(hom_img, h, (prespective_cols, prespective_rows))
 
     if remove_label:
@@ -491,6 +576,7 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
         x = cosine(img[i,:],img[i+1,:])
         cos_vals = np.append(cos_vals,(x))
     row_start,row_end = find_start_end_points(cos_vals)
+
 
     cropped_img = rotate_vertical_img(img_grey_org)[row_start - offset_background:row_end + offset_background, col_start - offset_background:col_end + offset_background]
 
