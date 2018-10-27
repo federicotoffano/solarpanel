@@ -247,14 +247,25 @@ def find_cells2(cropped_img, n_rows, n_cols, cell_real_width, cell_real_height, 
     mm_to_px_heigth = img_rows / (n_rows * cell_real_height + (n_rows - 1) * cells_real_distance)
     cell_pixel_width = int(cell_real_width * mm_to_px_width)
     cell_pixel_heigth = int(cell_real_height * mm_to_px_width)
+    mask = cp.copy(cropped_img)
+    mask[np.where(mask <= 255)] = 0
     for i in range(n_rows):
         for j in range(n_cols):
             offset_row = int((cell_real_height + cells_real_distance) * i * mm_to_px_heigth)
             offset_col = int((cell_real_width + cells_real_distance) * j * mm_to_px_width)
-            cv2.rectangle(cropped_img, (offset_col, offset_row), (offset_col + cell_pixel_width, offset_row + cell_pixel_heigth),
-                          0, int((cells_real_distance + 3) * mm_to_px_width))
+            cv2.rectangle(mask, (offset_col, offset_row), (offset_col + cell_pixel_width, offset_row + cell_pixel_heigth),
+                          255, int((cells_real_distance + 3) * mm_to_px_width))
 
-    return cropped_img
+    # box_s = 70
+    # for i in range(n_rows):
+    #     for j in range(n_cols):
+    #         offset_row = int((cell_real_height + cells_real_distance) * i * mm_to_px_heigth)
+    #         offset_col = int((cell_real_width + cells_real_distance) * j * mm_to_px_width)
+    #         cv2.rectangle(mask, (max(offset_col-int(box_s/2),0), max(int(offset_row-box_s/2),0)),
+    #                       (min(int(offset_col + box_s/2), img_cols), min(int(offset_row + box_s/2), img_rows)),
+    #                       255, box_s)
+
+    return mask
 
 
 def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove_label=False):
@@ -360,10 +371,9 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
         # !!! be careful, on the image [row, col], on the set of points for homography [col, row]
         pts1.append([tl_point[1] + 0, tl_point[0] + 0])
         pts2.append([0, 0])
-        #
-        plt.imshow(im2, cmap='gray', interpolation='bicubic')
-        plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
-        plt.show()
+        # plt.imshow(im2, cmap='gray', interpolation='bicubic')
+        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        # plt.show()
 
         tr_corner = img[0:box_size, img_cols - box_size:img_cols]
         ret, thresh = cv2.threshold(tr_corner, contour_t1, contour_t2, 0)
@@ -548,9 +558,9 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
         pts2 = np.float32(pts2)
         h, status = cv2.findHomography(pts1, pts2)
 
-        plt.imshow(hom_img, cmap='gray', interpolation='bicubic')
-        plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
-        plt.show()
+        # plt.imshow(hom_img, cmap='gray', interpolation='bicubic')
+        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        # plt.show()
 
         return cv2.warpPerspective(hom_img, h, (prespective_cols, prespective_rows))
 
