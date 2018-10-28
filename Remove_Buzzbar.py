@@ -5,11 +5,12 @@ Created on Sat Oct 27 20:59:35 2018
 @author: dbrowne
 """
 
+import cv2
 import numpy as np
 import copy as cp
-import cv2
 
-def remove_buzzbar(img_buzzbar_rm,n_rows):
+
+def remove_buzzbar(img_buzzbar_rm,n_rows,num_buzz_bar_per_img):
     divs = [i * (img_buzzbar_rm.shape[0]/n_rows) for i in list(range(n_rows))]
     for i in range(n_rows):
         if i == n_rows-1:
@@ -37,9 +38,11 @@ def remove_buzzbar(img_buzzbar_rm,n_rows):
         rowwise_gradient[rowwise_gradient <= 20] = 0
         min_start_point_buzzbar = 20
         min_dist_buzzbar = 50
+        min_width_check = 8
+        if num_buzz_bar_per_img == 3:
+            min_dist_buzzbar = 80
         width_check = 0
         dist_buzzbar_check = 0
-        min_width_check = 6
         buzz_points_start = []
         buzz_points_end = []
         off_set = 5
@@ -76,3 +79,8 @@ def remove_buzzbar(img_buzzbar_rm,n_rows):
                 
     img_medianBlur = cv2.medianBlur(img_buzzbar_rm,3)
     return img_medianBlur
+
+
+
+
+
