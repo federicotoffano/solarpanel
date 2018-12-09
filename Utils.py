@@ -202,10 +202,6 @@ def find_cells(img, offset_border, n_cols, n_rows, der_size=6, threshold=5, sear
         to = offset_border + (k + 1) * cell_height + search_area
         check_cols(fr, to, img, der_image)
 
-    plt.imshow(der_image, cmap='gray', interpolation='bicubic')
-    plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
-    plt.show()
-
     # searching rects given borders
     rects_image = np.zeros((img_rows, img_cols), np.uint8)
 
@@ -235,9 +231,7 @@ def find_cells(img, offset_border, n_cols, n_rows, der_size=6, threshold=5, sear
                 der_image.itemset((y1, x), 255)
                 y1 -= 1
             cv2.rectangle(der_image, (x1, y1), (x2, y2), 255, 1)
-    plt.imshow(der_image, cmap='gray', interpolation='bicubic')
-    plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
-    plt.show()
+
     return rects_image
 
 
@@ -296,7 +290,7 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
     # image rotation using Hough transform over Canny image
     def rotate_vertical_img(img):
         img_rows, img_cols = img.shape
-        canny_img = cv2.Canny(img, 50, 150, apertureSize=3)
+        canny_img = cv2.Canny(img, 30, 150, apertureSize=3)
 
         #line_image = np.zeros((img_rows, img_cols), np.uint8)
         lines = cv2.HoughLines(canny_img, 1, np.pi / 180, 400)
@@ -330,9 +324,13 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
         final_list = [x for x in final_list if (x <= mean + 2 * sd)]
         #print(final_list)
 
+
         print(np.mean(final_list))
         M = cv2.getRotationMatrix2D((img_cols / 2, img_rows / 2), math.degrees(np.mean(final_list)), 1)
-        return cv2.warpAffine(img, M, (img_cols, img_rows))
+        im = cv2.warpAffine(img, M, (img_cols, img_rows))
+
+
+        return im
 
     def cosine(a,b):
         ee = 1*10**-8
@@ -357,11 +355,17 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
         pts1 = list([])
         pts2 = list([])
 
-        box_size = offset_background + int(min(img_rows / n_rows / 4, img_cols / n_cols / 4))
+        box_size = offset_background + int(min(img_rows / n_rows / 3, img_cols / n_cols / 3))
 
         contour_t1, contour_t2 = 100, 255
 
         tl_corner = img[0:box_size, 0:box_size]
+
+        # th2 = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, \
+        #                            cv2.THRESH_BINARY, 11, 2)
+        # th3 = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, \
+        #                            cv2.THRESH_BINARY, 11, 2)
+
         ret, thresh = cv2.threshold(tl_corner, contour_t1, contour_t2, 0)
         im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         c = max(contours, key=cv2.contourArea)
@@ -371,11 +375,10 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
         # !!! be careful, on the image [row, col], on the set of points for homography [col, row]
         pts1.append([tl_point[1] + 0, tl_point[0] + 0])
         pts2.append([0, 0])
-        # plt.imshow(im2, cmap='gray', interpolation='bicubic')
-        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
-        # plt.show()
+
 
         tr_corner = img[0:box_size, img_cols - box_size:img_cols]
+
         ret, thresh = cv2.threshold(tr_corner, contour_t1, contour_t2, 0)
         im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         c = max(contours, key=cv2.contourArea)
@@ -435,6 +438,10 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
             l_box = img[l_point_row - int(box_size / 2):l_point_row + int(box_size / 2), 0:box_size]
             ret, thresh = cv2.threshold(l_box, contour_t1, contour_t2, 0)
             im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+            if len(contours) == 0: continue
+
+
             c = max(contours, key=cv2.contourArea)
             ext_left = tuple(c[c[:, :, 0].argmin()][0])
             l_point = [l_point_row, ext_left[0]]
@@ -445,6 +452,9 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
             r_box = img[r_point_row - int(box_size / 2):r_point_row + int(box_size / 2), img_cols - box_size:img_cols]
             ret, thresh = cv2.threshold(r_box, contour_t1, contour_t2, 0)
             im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+            if len(contours) == 0: continue
+
             c = max(contours, key=cv2.contourArea)
             ext_right = tuple(c[c[:, :, 0].argmax()][0])
             r_point = [r_point_row, ext_right[0] + img_cols - box_size]
@@ -460,6 +470,8 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
             t_box = img[0:box_size, t_point_col - int(box_size / 2):t_point_col + int(box_size / 2)]
             ret, thresh = cv2.threshold(t_box, contour_t1, contour_t2, 0)
             im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            if len(contours) == 0: continue
+
             c = max(contours, key=cv2.contourArea)
             ext_top = tuple(c[c[:, :, 1].argmin()][0])
             t_point = [ext_top[1], t_point_col]
@@ -470,6 +482,8 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
             b_box = img[img_rows - box_size:img_rows, b_point_col - int(box_size / 2):b_point_col + int(box_size / 2)]
             ret, thresh = cv2.threshold(b_box, contour_t1, contour_t2, 0)
             im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            if len(contours) == 0: continue
+
             c = max(contours, key=cv2.contourArea)
             ext_bot = tuple(c[c[:, :, 1].argmax()][0])
             b_point = [ext_bot[1] + img_rows - box_size, b_point_col]
@@ -487,6 +501,8 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
         img_rows, img_cols = hom_img.shape
 
 
+
+
         box_size = int(box_size/2)
         pts1 = list([[0, 0], [0, img_rows], [img_cols, 0], [img_cols, img_rows]])
         pts2 = list([[0, 0], [0, img_rows], [img_cols, 0], [img_cols, img_rows]])
@@ -497,6 +513,7 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
             cell_point_row = int(cell_height_px * (1 + j))
 
             l_box = hom_img[cell_point_row - int(box_size / 2):cell_point_row + int(box_size / 2), 0:box_size]
+
             ret, thresh = cv2.threshold(l_box, contour_t1, contour_t2, 0)
             im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             # find row with minimum n of black pixels
@@ -558,9 +575,9 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
         pts2 = np.float32(pts2)
         h, status = cv2.findHomography(pts1, pts2)
 
-        # plt.imshow(hom_img, cmap='gray', interpolation='bicubic')
-        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
-        # plt.show()
+        plt.imshow(hom_img, cmap='gray', interpolation='bicubic')
+        plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        plt.show()
 
         return cv2.warpPerspective(hom_img, h, (prespective_cols, prespective_rows))
 
@@ -568,11 +585,22 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
         img = remove_white_label(img)
     img = rotate_vertical_img(img)
 
+    #increase conntrast
+    clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8, 8))
+    img = clahe.apply(img)
+
+
+
     img = cv2.GaussianBlur(img, (15, 15), 0) # smoothen
     img = cv2.Canny(img, 5, 100) #detect edges
     # plt.imshow(img, cmap='gray', interpolation='bicubic')
     # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
     # plt.show()
+    plt.imshow(img, cmap='gray', interpolation='bicubic')
+    plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+    plt.show()
+
+
 
 
     cos_vals = np.array([])
@@ -588,12 +616,15 @@ def crop_img(file, n_rows, n_cols, offset_background=0, no_info_point=50, remove
     row_start,row_end = find_start_end_points(cos_vals)
 
 
-    cropped_img = rotate_vertical_img(img_grey_org)[row_start - offset_background:row_end + offset_background, col_start - offset_background:col_end + offset_background]
+
+    cropped_img = rotate_vertical_img(img_grey_org)
 
 
 
-    # plt.imshow(cropped_img, cmap='gray', interpolation='bicubic')
-    # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
-    # plt.show()
+    cropped_img=cropped_img[row_start - offset_background:row_end + offset_background, col_start - offset_background:col_end + offset_background]
+
+    plt.imshow(cropped_img, cmap='gray', interpolation='bicubic')
+    plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+    plt.show()
 
     return cpmpute_homography(cropped_img)
